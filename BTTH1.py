@@ -1,5 +1,3 @@
-import re
-
 # Khởi tạo kho lưu trữ log toàn cục
 raw_logs = []
 processed_logs = []
@@ -7,12 +5,6 @@ processed_logs = []
 def clean_data(str_input: str) -> int:
     """Làm sạch chuỗi log thô bằng cách loại bỏ các ký tự đặc biệt (!@#$)
     và phân tách chúng thành danh sách các log riêng biệt.
-
-    Args:
-        str_input (str): Chuỗi log thô nhận vào từ người dùng.
-
-    Returns:
-        int: Số lượng dòng log hợp lệ đã được làm sạch và thêm vào hệ thống.
     """
     if not str_input.strip():
         return 0
@@ -29,17 +21,8 @@ def clean_data(str_input: str) -> int:
     return len(list_log)
 
 def filter_data(logs_list: list) -> int:
-    """Lọc các dòng log có chứa từ khóa nguy hiểm (ERROR hoặc CRITICAL).
-    Kết quả sẽ làm mới và cập nhật vào danh sách processed_logs.
-
-    Args:
-        logs_list (list): Danh sách các log thô cần kiểm tra.
-
-    Returns:
-        int: Số lượng log nguy hiểm tìm thấy.
-    """
+    """Lọc các dòng log có chứa từ khóa nguy hiểm (ERROR hoặc CRITICAL)."""
     global processed_logs
-    # Làm mới danh sách processed_logs để tránh trùng lặp dữ liệu khi chạy lại nhiều lần
     processed_logs = []
 
     if not logs_list:
@@ -54,23 +37,44 @@ def filter_data(logs_list: list) -> int:
     return len(result)
 
 def mask_ip_data(danger_logs: list) -> list:
-    """Tìm và làm mờ 2 Octet cuối của địa chỉ IPv4 trong danh sách log bằng dấu '*'.
-    Sử dụng Regular Expression để đảm bảo độ chính xác ngay cả khi IP dính dấu câu.
-
-    Args:
-        danger_logs (list): Danh sách các log chứa cảnh báo cần che dấu IP.
-
-    Returns:
-        list: Danh sách log mới đã được mã hóa địa chỉ IP.
+    """Tìm và làm mờ 2 Octet cuối của địa chỉ IPv4 bằng cách tách chuỗi thủ công,
+    không sử dụng thư viện re (Regex).
     """
     masked_result = []
-    # Regex nhận diện IPv4 dạng X.X.X.X
-    ip_pattern = r'\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b'
-
+    
     for log in danger_logs:
-        # Thay thế octet thứ 3 và 4 thành '*'
-        masked_log = re.sub(ip_pattern, r'\1.\2.*.*', log)
-        masked_result.append(masked_log)
+        # Tách dòng log thành từng từ để kiểm tra xem từ nào là IP
+        words = log.split()
+        for i in range(len(words)):
+            word = words[i]
+            
+            # Tách các dấu câu dính ở đầu hoặc cuối từ (ví dụ: "192.168.1.1,", "10.0.0.1:")
+            prefix = ""
+            suffix = ""
+            while word and not word[0].isdigit():
+                prefix += word[0]
+                word = word[1:]
+            while word and not word[-1].isdigit():
+                suffix = word[-1] + suffix
+                word = word[:-1]
+                
+            # Kiểm tra xem từ này có cấu trúc giống IPv4 (X.X.X.X) không
+            parts = word.split('.')
+            if len(parts) == 4:
+                # Kiểm tra cả 4 phần có phải là số từ 0 - 255 không
+                is_ip = True
+                for part in parts:
+                    if not part.isdigit() or not (0 <= int(part) <= 255):
+                        is_ip = False
+                        break
+                
+                # Nếu đúng là IP, tiến hành che 2 octet cuối (*.*)
+                if is_ip:
+                    masked_ip = f"{parts[0]}.{parts[1]}.*.*"
+                    words[i] = prefix + masked_ip + suffix
+                    
+        # Ghép các từ lại thành dòng log hoàn chỉnh
+        masked_result.append(" ".join(words))
         
     return masked_result
 
